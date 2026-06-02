@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PCR Register Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0ee; color: #1a1a1a; padding: 18px 20px 32px; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+.header-title { font-size: 17px; font-weight: 600; color: #111; }
+.header-sub { font-size: 12px; color: #888; margin-top: 2px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.tiles.has-blank { grid-template-columns: repeat(4, 1fr); }
+.tile { background: #fff; border-radius: 10px; border: 0.5px solid #e0e0dc; padding: 14px 16px; cursor: pointer; transition: box-shadow 0.15s, transform 0.1s; user-select: none; }
+.tile:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.10); transform: translateY(-1px); }
+.tile.active { box-shadow: 0 0 0 2px #5B9BD5; }
+.tile-label { font-size: 11px; color: #999; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+.tile-value { font-size: 30px; font-weight: 600; line-height: 1; }
+.tile-sub { font-size: 11px; margin-top: 5px; color: #aaa; }
+.tile-hint { font-size: 10px; color: #bbb; margin-top: 3px; }
+.v-total { color: #1a1a1a; }
+.v-open  { color: #c03030; }
+.v-blank { color: #cc7700; }
+.v-closed{ color: #3a6e12; }
+.drill-panel { background: #fff; border-radius: 10px; border: 0.5px solid #e0e0dc; padding: 14px 16px; margin-bottom: 14px; display: none; }
+.drill-panel.visible { display: block; }
+.drill-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.drill-title { font-size: 13px; font-weight: 600; color: #333; }
+.drill-close { font-size: 12px; color: #888; cursor: pointer; border: none; background: none; padding: 2px 6px; border-radius: 4px; }
+.drill-close:hover { background: #f0f0f0; }
+.drill-search { font-size: 12px; border: 1px solid #ddd; border-radius: 6px; padding: 5px 10px; width: 200px; outline: none; }
+.drill-search:focus { border-color: #5B9BD5; }
+.pcr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pcr-table th { text-align: left; padding: 7px 10px; background: #f7f7f5; border-bottom: 1px solid #e8e8e4; color: #666; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; white-space: nowrap; }
+.pcr-table th:hover { background: #efefec; }
+.pcr-table td { padding: 7px 10px; border-bottom: 0.5px solid #f0f0ee; color: #333; }
+.pcr-table tr:last-child td { border-bottom: none; }
+.pcr-table tr:hover td { background: #fafafa; }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.badge-open   { background: #fde8e8; color: #b02020; }
+.badge-closed { background: #e6f2d8; color: #3a6e12; }
+.badge-wip    { background: #fff0d0; color: #8a5500; }
+.badge-blank  { background: #ececec; color: #888; }
+.drill-count  { font-size: 11px; color: #999; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.row3 { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
+.card { background: #fff; border-radius: 10px; border: 0.5px solid #e0e0dc; padding: 16px 18px; }
+.card-title { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #666; }
+.leg-dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">PCR Register Dashboard</div>
+    <div class="header-sub">Hamilton Jet &mdash; Process Change Control &mdash; <span id="asof"></span></div>
+  </div>
+</div>
+
+<div class="tiles">
+  <div class="tile" onclick="drillDown('all')" id="tile-all">
+    <div class="tile-label">Total PCRs</div>
+    <div class="tile-value v-total" id="t-total">—</div>
+    <div class="tile-sub">PCR0275 – PCR0386+</div>
+    <div class="tile-hint">Click to view all</div>
+  </div>
+  <div class="tile" onclick="drillDown('open')" id="tile-open">
+    <div class="tile-label">Open</div>
+    <div class="tile-value v-open" id="t-open">—</div>
+    <div class="tile-sub" id="t-open-sub"></div>
+    <div class="tile-hint">Click to view</div>
+  </div>
+  <div class="tile" onclick="drillDown('closed')" id="tile-closed">
+    <div class="tile-label">Closed</div>
+    <div class="tile-value v-closed" id="t-closed">—</div>
+    <div class="tile-sub" id="t-closed-sub"></div>
+    <div class="tile-hint">Click to view</div>
+  </div>
+  <div class="tile" onclick="drillDown('blank')" id="tile-blank" style="display:none">
+    <div class="tile-label">Blank / Pending</div>
+    <div class="tile-value v-blank" id="t-blank">—</div>
+    <div class="tile-sub" id="t-blank-sub"></div>
+    <div class="tile-hint">Click to view</div>
+  </div>
+</div>
+
+<div class="drill-panel" id="drillPanel">
+  <div class="drill-header">
+    <div>
+      <span class="drill-title" id="drillTitle">All PCRs</span>
+      <span class="drill-count" id="drillCount" style="margin-left:8px"></span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="drill-search" id="drillSearch" placeholder="Search PCR, work centre…" oninput="renderTable()">
+      <button class="drill-close" onclick="closeDrill()">✕ Close</button>
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="pcr-table">
+      <thead>
+        <tr>
+          <th onclick="sortBy('pcr')">PCR # <span id="sort-pcr"></span></th>
+          <th onclick="sortBy('date')">Date Raised <span id="sort-date"></span></th>
+          <th onclick="sortBy('wc')">Work Centre <span id="sort-wc"></span></th>
+          <th onclick="sortBy('status')">Status <span id="sort-status"></span></th>
+          <th onclick="sortBy('prog')">Program Status <span id="sort-prog"></span></th>
+          <th onclick="sortBy('proven')">Proven Status <span id="sort-proven"></span></th>
+        </tr>
+      </thead>
+      <tbody id="drillBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="row3">
+  <div class="card">
+    <div class="card-title">PCRs by Work Centre (consolidated)</div>
+    <div id="wcChartWrap"></div>
+    <div class="legend">
+      <span class="leg"><span class="leg-dot" style="background:#E24B4A"></span>Open</span>
+      <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>Blank</span>
+      <span class="leg"><span class="leg-dot" style="background:#639922"></span>Closed</span>
+    </div>
+  </div>
+  <div class="card" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="card-title" style="align-self:flex-start">Status Breakdown</div>
+    <div id="donutWrap"></div>
+    <div class="legend" style="justify-content:center;margin-top:6px" id="donutLegend"></div>
+  </div>
+</div>
+
+<div class="row2" style="margin-bottom:12px">
+  <div class="card">
+    <div class="card-title">Open PCRs — Program Status</div>
+    <div style="font-size:11px;color:#999;margin-bottom:10px;" id="prog-sub"></div>
+    <div id="progChartWrap"></div>
+    <div class="legend" style="margin-top:8px">
+      <span class="leg"><span class="leg-dot" style="background:#E24B4A"></span>Open</span>
+      <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>WIP</span>
+      <span class="leg"><span class="leg-dot" style="background:#639922"></span>Closed</span>
+      <span class="leg"><span class="leg-dot" style="background:#ccc"></span>Blank</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Open PCRs — Proven Status</div>
+    <div style="font-size:11px;color:#999;margin-bottom:10px;" id="proven-sub"></div>
+    <div id="provenChartWrap"></div>
+    <div class="legend" style="margin-top:8px">
+      <span class="leg"><span class="leg-dot" style="background:#E24B4A"></span>Open</span>
+      <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>WIP</span>
+      <span class="leg"><span class="leg-dot" style="background:#639922"></span>Closed</span>
+      <span class="leg"><span class="leg-dot" style="background:#ccc"></span>Blank</span>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('asof').textContent = 'Data as of ' + new Date().toLocaleDateString('en-NZ', {day:'numeric',month:'long',year:'numeric'});
+
+const ALL_PCRS = [
+  {pcr:"PCR0275",status:"Closed",wc:"NT4000",prog:"Closed",proven:"Closed",date:"2023-05-23"},
+  {pcr:"PCR0276",status:"Closed",wc:"NT4000B",prog:"Closed",proven:"Closed",date:"2023-05-24"},
+  {pcr:"PCR0277",status:"Closed",wc:"NT4000",prog:"Closed",proven:"Closed",date:"2023-06-07"},
+  {pcr:"PCR0278",status:"Closed",wc:"MT4000B",prog:"Closed",proven:"Closed",date:"2023-06-13"},
+  {pcr:"PCR0279",status:"Open",wc:"TC01R",prog:"WIP",proven:"WIP",date:"2023-06-14"},
+  {pcr:"PCR0280",status:"Closed",wc:"NT4000B",prog:"Closed",proven:"Closed",date:"2023-06-15"},
+  {pcr:"PCR0281",status:"Closed",wc:"NT4250A/B",prog:"Closed",proven:"Closed",date:"2023-06-26"},
+  {pcr:"PCR0282",status:"Closed",wc:"NT4250a",prog:"Closed",proven:"Closed",date:"2023-07-11"},
+  {pcr:"PCR0283",status:"Closed",wc:"MT253",prog:"Closed",proven:"Closed",date:"2023-07-18"},
+  {pcr:"PCR0284",status:"Closed",wc:"NT4250/MT253",prog:"Closed",proven:"Closed",date:"2023-07-20"},
+  {pcr:"PCR0285",status:"Closed",wc:"NT4250",prog:"Closed",proven:"Closed",date:"2023-07-24"},
+  {pcr:"PCR0286",status:"Closed",wc:"NT4250 -253",prog:"Closed",proven:"Closed",date:"2023-07-31"},
+  {pcr:"PCR0287",status:"Open",wc:"MT253",prog:"Closed",proven:"",date:""},
+  {pcr:"PCR0288",status:"Open",wc:"MT253-NT4250B",prog:"Closed",proven:"",date:"2023-08-18"},
+  {pcr:"PCR0289",status:"Closed",wc:"NT4250",prog:"Closed",proven:"Closed",date:"2023-08-18"},
+  {pcr:"PCR0290",status:"Open",wc:"NT4250 SL253",prog:"Closed",proven:"",date:"2023-08-18"},
+  {pcr:"PCR0291",status:"Closed",wc:"SL-253",prog:"Closed",proven:"Closed",date:"2024-01-24"},
+  {pcr:"PCR0292",status:"Closed",wc:"SL-253",prog:"Closed",proven:"Closed",date:"2024-01-29"},
+  {pcr:"PCR0293",status:"Closed",wc:"SL-253",prog:"Closed",proven:"Closed",date:"2024-01-31"},
+  {pcr:"PCR0294",status:"Open",wc:"SL-253",prog:"Closed",proven:"",date:"2024-02-26"},
+  {pcr:"PCR0295",status:"Closed",wc:"SL-253",prog:"Closed",proven:"Closed",date:"2024-02-26"},
+  {pcr:"PCR0296",status:"Closed",wc:"MT4000-a",prog:"Closed",proven:"Closed",date:"2024-02-26"},
+  {pcr:"PCR0297",status:"Closed",wc:"MT4000A/B",prog:"Closed",proven:"Closed",date:"2024-02-28"},
+  {pcr:"PCR0298",status:"Closed",wc:"MT4000A/B",prog:"Closed",proven:"Closed",date:"2024-02-28"},
+  {pcr:"PCR0299",status:"Closed",wc:"MT253",prog:"Closed",proven:"Closed",date:"2024-02-28"},
+  {pcr:"PCR0300",status:"Closed",wc:"MT4000",prog:"Closed",proven:"Closed",date:"2024-03-04"},
+  {pcr:"PCR0301",status:"Closed",wc:"MT4000",prog:"Closed",proven:"Closed",date:"2024-03-06"},
+  {pcr:"PCR0302",status:"Closed",wc:"SL-253",prog:"Closed",proven:"Closed",date:"2024-03-08"},
+  {pcr:"PCR0303",status:"Closed",wc:"MT4000A",prog:"Closed",proven:"Closed",date:"2024-03-08"},
+  {pcr:"PCR0304",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2024-03-22"},
+  {pcr:"PCR0305",status:"Closed",wc:"MT4000",prog:"Closed",proven:"Closed",date:"2024-03-25"},
+  {pcr:"PCR0306",status:"Open",wc:"NT4250B",prog:"Closed",proven:"",date:"2024-03-26"},
+  {pcr:"PCR0307",status:"Open",wc:"SL253",prog:"Closed",proven:"",date:"2024-04-09"},
+  {pcr:"PCR0309",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:""},
+  {pcr:"PCR0310",status:"Closed",wc:"NT4250A",prog:"Closed",proven:"Closed",date:"2024-04-09"},
+  {pcr:"PCR0311",status:"Closed",wc:"DL151",prog:"Closed",proven:"Closed",date:"2024-04-09"},
+  {pcr:"PCR0312",status:"Closed",wc:"MT4000B",prog:"Closed",proven:"Closed",date:"2024-04-17"},
+  {pcr:"PCR0313",status:"Closed",wc:"MT4000B",prog:"Closed",proven:"Closed",date:"2024-04-17"},
+  {pcr:"PCR0314",status:"Closed",wc:"NT4250A",prog:"Closed",proven:"Closed",date:"2024-04-17"},
+  {pcr:"PCR0315",status:"Closed",wc:"MT4000B",prog:"Closed",proven:"Closed",date:"2024-04-17"},
+  {pcr:"PCR0316",status:"Closed",wc:"NT4250A",prog:"Closed",proven:"Closed",date:"2024-04-17"},
+  {pcr:"PCR0317",status:"Open",wc:"MT4000B",prog:"Open",proven:"",date:"2024-04-17"},
+  {pcr:"PCR0318",status:"Open",wc:"MT253",prog:"Closed",proven:"WIP",date:"2024-04-17"},
+  {pcr:"PCR-121505",status:"Closed",wc:"MT4000B",prog:"Closed",proven:"Closed",date:"2024-05-14"},
+  {pcr:"PCR-100755",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2024-04-29"},
+  {pcr:"PCR-122313",status:"Open",wc:"NT4250",prog:"Closed",proven:"WIP",date:"2024-05-16"},
+  {pcr:"PCR-121846",status:"Open",wc:"SL253",prog:"Closed",proven:"WIP",date:"2024-05-17"},
+  {pcr:"PCR-090716",status:"Open",wc:"SL253",prog:"Closed",proven:"",date:"2024-05-30"},
+  {pcr:"PCR-084023",status:"Open",wc:"SL253",prog:"Closed",proven:"",date:"2024-06-10"},
+  {pcr:"PCR-083316",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2024-06-18"},
+  {pcr:"PCR-023531",status:"Closed",wc:"NT4250",prog:"Closed",proven:"Closed",date:"2024-06-11"},
+  {pcr:"PCR-133906",status:"Open",wc:"SL253",prog:"Closed",proven:"WIP",date:"2024-05-27"},
+  {pcr:"PCR-180833",status:"Closed",wc:"MT253",prog:"Closed",proven:"Closed",date:"2024-05-09"},
+  {pcr:"PCR-091601",status:"Open",wc:"SL253",prog:"Closed",proven:"WIP",date:"2024-06-20"},
+  {pcr:"PCR-153903",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2024-06-24"},
+  {pcr:"PCR-142252",status:"Open",wc:"???",prog:"Open",proven:"",date:"2024-06-25"},
+  {pcr:"PCR-110350",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2024-05-27"},
+  {pcr:"PCR-142537",status:"Closed",wc:"NT4250",prog:"Closed",proven:"Closed",date:"2024-06-06"},
+  {pcr:"PCR-152158",status:"Open",wc:"SL253",prog:"Closed",proven:"Open",date:"2024-06-21"},
+  {pcr:"PCR-063730",status:"Closed",wc:"All",prog:"Closed",proven:"Closed",date:"2024-06-19"},
+  {pcr:"PCR0322",status:"Closed",wc:"MT4000 A / B",prog:"Closed",proven:"Closed",date:"2024-08-30"},
+  {pcr:"PCR0323",status:"Open",wc:"SL253",prog:"Closed",proven:"WIP",date:"2024-08-30"},
+  {pcr:"PCR0324",status:"Open",wc:"NT4250",prog:"WIP",proven:"WIP",date:"2024-08-30"},
+  {pcr:"PCR0325",status:"Closed",wc:"MC5VA",prog:"Closed",proven:"Closed",date:"2024-08-30"},
+  {pcr:"PCR0326",status:"Open",wc:"SL253",prog:"Closed",proven:"WIP",date:"2024-08-30"},
+  {pcr:"PCR0327",status:"Open",wc:"SL253",prog:"Closed",proven:"WIP",date:"2024-08-30"},
+  {pcr:"PCR0328",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2024-08-30"},
+  {pcr:"PCR0329",status:"Open",wc:"SL253",prog:"WIP",proven:"",date:"2024-08-30"},
+  {pcr:"PCR0330",status:"Closed",wc:"NT4250",prog:"Closed",proven:"Closed",date:"2024-08-30"},
+  {pcr:"PCR0331",status:"Open",wc:"NT4250",prog:"Open",proven:"",date:"2024-08-30"},
+  {pcr:"PCR0332",status:"Closed",wc:"NT4250",prog:"Closed",proven:"Closed",date:"2024-08-30"},
+  {pcr:"PCR0333",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:""},
+  {pcr:"PCR0334",status:"Open",wc:"MT4000 B",prog:"Closed",proven:"",date:"2024-09-06"},
+  {pcr:"PCR0335",status:"Closed",wc:"NLX2500 - SL253",prog:"Closed",proven:"Closed",date:"2024-09-09"},
+  {pcr:"PCR0336",status:"Open",wc:"MT4000A",prog:"Closed",proven:"",date:"2024-09-06"},
+  {pcr:"PCR0337",status:"Open",wc:"SL253 B",prog:"Open",proven:"",date:"2024-09-10"},
+  {pcr:"PCR0338",status:"Open",wc:"NT4250A",prog:"Closed",proven:"",date:"2024-09-11"},
+  {pcr:"PCR0339",status:"Closed",wc:"NT4250A/MT253",prog:"Closed",proven:"Closed",date:"2024-09-28"},
+  {pcr:"PCR0340",status:"Open",wc:"NT4250A/MT253",prog:"Open",proven:"",date:"2024-10-01"},
+  {pcr:"PCR0341",status:"Open",wc:"NT4250A/MT253",prog:"Closed",proven:"",date:"2024-10-02"},
+  {pcr:"PCR0342",status:"Open",wc:"NLX2500 - SL253",prog:"Closed",proven:"",date:"2024-12-02"},
+  {pcr:"PCR0343",status:"Open",wc:"NT4250A/MT253",prog:"Open",proven:"",date:"2024-12-02"},
+  {pcr:"PCR0344",status:"Open",wc:"NT4250A/MT254",prog:"Open",proven:"",date:"2024-12-02"},
+  {pcr:"PCR0345",status:"Open",wc:"NT4250",prog:"Closed",proven:"",date:"2024-12-02"},
+  {pcr:"PCR0346",status:"Open",wc:"NT4250 A / B",prog:"Closed",proven:"WIP",date:"2025-02-13"},
+  {pcr:"PCR0347",status:"Open",wc:"NT4250",prog:"Closed",proven:"",date:"2024-11-30"},
+  {pcr:"PCR0348",status:"Open",wc:"NT4250 A / B",prog:"Closed",proven:"WIP",date:"2025-03-06"},
+  {pcr:"PCR0349",status:"Closed",wc:"NT4250",prog:"Closed",proven:"Closed",date:"2025-03-06"},
+  {pcr:"PCR0350",status:"Open",wc:"SL253",prog:"Closed",proven:"WIP",date:"2025-03-31"},
+  {pcr:"PCR0351",status:"Closed",wc:"MT4000B",prog:"Closed",proven:"Closed",date:"2025-04-03"},
+  {pcr:"PCR0352",status:"Open",wc:"MT4000B",prog:"Closed",proven:"",date:"2025-04-03"},
+  {pcr:"PCR0353",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2025-04-08"},
+  {pcr:"PCR0354",status:"Closed",wc:"SL253",prog:"Closed",proven:"Closed",date:"2025-04-11"},
+  {pcr:"PCR0355",status:"Closed",wc:"MT4000 A /B",prog:"Closed",proven:"Closed",date:"2025-07-12"},
+  {pcr:"PCR0356",status:"Open",wc:"MT253 / NT4250",prog:"Open",proven:"",date:"2025-07-12"},
+  {pcr:"PCR0357",status:"Closed",wc:"MT4000 A / B",prog:"Closed",proven:"Closed",date:"2025-07-12"},
+  {pcr:"PCR0358",status:"Closed",wc:"MT4000 A / B",prog:"Closed",proven:"Closed",date:"2025-07-12"},
+  {pcr:"PCR0359",status:"Closed",wc:"MT253 NT4250 A / B",prog:"Closed",proven:"Closed",date:"2025-07-12"},
+  {pcr:"PCR0360",status:"Closed",wc:"MT4000 A / B",prog:"Closed",proven:"Closed",date:"2025-07-13"},
+  {pcr:"PCR0361",status:"Open",wc:"NT4250",prog:"Closed",proven:"Open",date:"2025-07-30"},
+  {pcr:"PCR0362",status:"Open",wc:"MT4000A",prog:"Closed",proven:"Open",date:"2025-07-29"},
+  {pcr:"PCR0363",status:"Open",wc:"SL253A",prog:"Closed",proven:"WIP",date:"2025-07-24"},
+  {pcr:"PCR0364",status:"Closed",wc:"SL253A",prog:"Closed",proven:"Closed",date:"2025-07-23"},
+  {pcr:"PCR0365",status:"Open",wc:"NT4250",prog:"Closed",proven:"",date:""},
+  {pcr:"PCR0366",status:"Closed",wc:"MT4000 A / B",prog:"Closed",proven:"Closed",date:"2025-08-15"},
+  {pcr:"PCR0367",status:"Open",wc:"MT253",prog:"Closed",proven:"WIP",date:"2025-08-09"},
+  {pcr:"PCR0368",status:"Closed",wc:"MT4000 A / B",prog:"Closed",proven:"Closed",date:"2025-08-07"},
+  {pcr:"PCR0369",status:"Open",wc:"MT4000 A / B",prog:"Closed",proven:"Open",date:"2025-08-01"},
+  {pcr:"PCR0370",status:"Open",wc:"MT4000 A",prog:"Closed",proven:"Open",date:"2025-09-08"},
+  {pcr:"PCR0371",status:"Open",wc:"MT4000 B",prog:"Closed",proven:"",date:"2025-09-10"},
+  {pcr:"PCR0372",status:"Open",wc:"MT4000",prog:"Closed",proven:"",date:"2025-08-22"},
+  {pcr:"PRC0373",status:"Open",wc:"TC-04",prog:"Closed",proven:"",date:"2025-08-18"},
+  {pcr:"PCR0374",status:"Open",wc:"NT4250 A / B",prog:"WIP",proven:"",date:"2025-10-03"},
+  {pcr:"PCR0375",status:"Open",wc:"MT253",prog:"Closed",proven:"",date:"2025-10-13"},
+  {pcr:"PCR0376",status:"Open",wc:"SL253",prog:"Closed",proven:"",date:"2025-10-20"},
+  {pcr:"PCR0377",status:"Open",wc:"SL253",prog:"Closed",proven:"",date:"2025-10-20"},
+  {pcr:"PCR0378",status:"Closed",wc:"MT4000A",prog:"Closed",proven:"Closed",date:"2025-11-12"},
+  {pcr:"PCR0379",status:"Open",wc:"MT253 / NT4250s",prog:"WIP",proven:"",date:"2026-01-19"},
+  {pcr:"PCR0380",status:"Open",wc:"NT4250",prog:"WIP",proven:"",date:"2026-01-19"},
+  {pcr:"PCR0381",status:"Open",wc:"MT4000A/B",prog:"Closed",proven:"",date:"2026-01-19"},
+  {pcr:"PCR0382",status:"Open",wc:"MT4000A/B",prog:"Open",proven:"",date:"2026-02-10"},
+  {pcr:"PCR0383",status:"Open",wc:"NT4250B",prog:"Closed",proven:"",date:"2026-05-13"},
+  {pcr:"PCR0384",status:"Open",wc:"NT4250",prog:"WIP",proven:"",date:"2026-05-13"},
+  {pcr:"PCR0385",status:"Open",wc:"MT4000 A/B",prog:"Closed",proven:"",date:"2026-05-13"},
+  {pcr:"PCR0386",status:"Open",wc:"NT4250",prog:"",proven:"",date:"2026-05-13"}
+];
+
+/* ── Counts ── */
+let nOpen=0, nClosed=0, nBlank=0;
+ALL_PCRS.forEach(r => {
+  const s = (r.status||'').trim();
+  if (s==='Open') nOpen++;
+  else if (s==='Closed') nClosed++;
+  else nBlank++;
+});
+const nTotal = ALL_PCRS.length;
+
+document.getElementById('t-total').textContent = nTotal;
+document.getElementById('t-open').textContent = nOpen;
+document.getElementById('t-open-sub').textContent = Math.round(nOpen/nTotal*100)+'% of total';
+document.getElementById('t-closed').textContent = nClosed;
+document.getElementById('t-closed-sub').textContent = Math.round(nClosed/nTotal*100)+'% of total';
+document.getElementById('t-blank').textContent = nBlank;
+document.getElementById('t-blank-sub').textContent = 'Status not set';
+if (nBlank > 0) {
+  document.getElementById('tile-blank').style.display = '';
+  document.querySelector('.tiles').classList.add('has-blank');
+}
+
+/* ── Drill-down ── */
+let currentFilter = null, sortCol = 'pcr', sortDir = 1;
+
+function badge(val) {
+  const v = (val||'').toLowerCase().trim();
+  if (v==='open')   return `<span class="badge badge-open">Open</span>`;
+  if (v==='closed') return `<span class="badge badge-closed">Closed</span>`;
+  if (v==='wip')    return `<span class="badge badge-wip">WIP</span>`;
+  return `<span class="badge badge-blank">${val||'Blank'}</span>`;
+}
+
+function getFiltered() {
+  const q = (document.getElementById('drillSearch').value||'').toLowerCase();
+  return ALL_PCRS
+    .filter(r => {
+      if (currentFilter==='open')   return (r.status||'').trim()==='Open';
+      if (currentFilter==='closed') return (r.status||'').trim()==='Closed';
+      if (currentFilter==='blank')  return (r.status||'').trim()!=='Open' && (r.status||'').trim()!=='Closed';
+      return true;
+    })
+    .filter(r => !q || r.pcr.toLowerCase().includes(q) || (r.wc||'').toLowerCase().includes(q) || (r.status||'').toLowerCase().includes(q))
+    .sort((a,b) => {
+      const va = (a[sortCol]||'').toLowerCase(), vb = (b[sortCol]||'').toLowerCase();
+      return va < vb ? -sortDir : va > vb ? sortDir : 0;
+    });
+}
+
+function drillDown(f) {
+  currentFilter = f;
+  document.querySelectorAll('.tile').forEach(t => t.classList.remove('active'));
+  document.getElementById('tile-'+f).classList.add('active');
+  const titles = {all:'All PCRs', open:'Open PCRs', closed:'Closed PCRs', blank:'Blank / Pending PCRs'};
+  document.getElementById('drillTitle').textContent = titles[f]||'PCRs';
+  document.getElementById('drillSearch').value = '';
+  document.getElementById('drillPanel').classList.add('visible');
+  renderTable();
+  document.getElementById('drillPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function closeDrill() {
+  document.getElementById('drillPanel').classList.remove('visible');
+  document.querySelectorAll('.tile').forEach(t => t.classList.remove('active'));
+  currentFilter = null;
+}
+
+function renderTable() {
+  const rows = getFiltered();
+  document.getElementById('drillCount').textContent = rows.length + ' records';
+  document.getElementById('drillBody').innerHTML = rows.map(r =>
+    `<tr><td style="font-weight:600">${r.pcr}</td><td>${r.date||'—'}</td><td>${r.wc||'—'}</td><td>${badge(r.status)}</td><td>${badge(r.prog)}</td><td>${badge(r.proven)}</td></tr>`
+  ).join('');
+  ['pcr','date','wc','status','prog','proven'].forEach(c => {
+    document.getElementById('sort-'+c).textContent = c===sortCol ? (sortDir===1?' ↑':' ↓') : '';
+  });
+}
+
+function sortBy(col) {
+  if (sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=1; }
+  renderTable();
+}
+
+/* ── SVG Charts ── */
+const C = {open:'#E24B4A', blank:'#EF9F27', closed:'#639922'};
+
+function groupWC(name) {
+  const u = (name||'').toUpperCase().replace(/[-\s]+/g,' ').trim();
+  if (u.includes('MT4000')) return 'MT4000 series';
+  if (u.includes('NT4250') && u.includes('MT253')) return 'NT4250/MT253';
+  if (u.includes('NT4250') && u.includes('SL253')) return 'NT4250/SL253';
+  if (u.includes('NT4250')) return 'NT4250 series';
+  if (u.includes('MT253')) return 'MT253';
+  if (u.includes('SL253') || u.includes('NLX2500')) return 'SL253 series';
+  if (u.includes('NT4000')) return 'NT4000 series';
+  return 'Other';
+}
+
+/* Work Centre horizontal stacked bar */
+(function() {
+  const grp = {};
+  ALL_PCRS.forEach(r => {
+    const g = groupWC(r.wc);
+    if (!grp[g]) grp[g] = {Open:0,Blank:0,Closed:0};
+    const s = (r.status||'').trim();
+    if (s==='Open') grp[g].Open++;
+    else if (s==='Closed') grp[g].Closed++;
+    else grp[g].Blank++;
+  });
+  const rows = Object.entries(grp).sort((a,b)=>(b[1].Open+b[1].Blank+b[1].Closed)-(a[1].Open+a[1].Blank+a[1].Closed));
+  const maxVal = Math.max(...rows.map(r=>r[1].Open+r[1].Blank+r[1].Closed));
+  const W=460, barH=22, gap=8, labelW=110, padTop=6, padRight=10;
+  const H = rows.length*(barH+gap)+padTop*2;
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
+  rows.forEach(([name,d],i) => {
+    const y = padTop + i*(barH+gap);
+    const avail = W - labelW - padRight;
+    const scale = avail / maxVal;
+    const wOpen = d.Open*scale, wBlank = d.Blank*scale, wClosed = d.Closed*scale;
+    svg += `<text x="${labelW-6}" y="${y+barH/2+4}" text-anchor="end" font-size="11" fill="#666">${name}</text>`;
+    let x = labelW;
+    if (wOpen>0)   { svg += `<rect x="${x}" y="${y}" width="${wOpen}"   height="${barH}" fill="${C.open}"   rx="0"/>`; x+=wOpen; }
+    if (wBlank>0)  { svg += `<rect x="${x}" y="${y}" width="${wBlank}"  height="${barH}" fill="${C.blank}"  rx="0"/>`; x+=wBlank; }
+    if (wClosed>0) { svg += `<rect x="${x}" y="${y}" width="${wClosed}" height="${barH}" fill="${C.closed}" rx="0"/>`; }
+    const total = d.Open+d.Blank+d.Closed;
+    svg += `<text x="${labelW+(total*scale)+4}" y="${y+barH/2+4}" font-size="10" fill="#999">${total}</text>`;
+  });
+  svg += '</svg>';
+  document.getElementById('wcChartWrap').innerHTML = svg;
+})();
+
+/* Donut chart */
+(function() {
+  const data = [{label:'Open',v:nOpen,c:C.open},{label:'Closed',v:nClosed,c:C.closed}];
+  if (nBlank > 0) data.push({label:'Blank',v:nBlank,c:C.blank});
+  const cx=90, cy=90, ro=70, ri=45, total=nTotal;
+  let svg = `<svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">`;
+  if (total===0) { svg+=`<circle cx="${cx}" cy="${cy}" r="${ro}" fill="#eee"/>`; }
+  else {
+    let angle = -Math.PI/2;
+    data.forEach(d => {
+      if (d.v===0) return;
+      const sweep = (d.v/total)*Math.PI*2;
+      const x1=cx+ro*Math.cos(angle), y1=cy+ro*Math.sin(angle);
+      const x2=cx+ro*Math.cos(angle+sweep), y2=cy+ro*Math.sin(angle+sweep);
+      const x3=cx+ri*Math.cos(angle+sweep), y3=cy+ri*Math.sin(angle+sweep);
+      const x4=cx+ri*Math.cos(angle), y4=cy+ri*Math.sin(angle);
+      const large = sweep>Math.PI?1:0;
+      svg += `<path d="M${x1},${y1} A${ro},${ro},0,${large},1,${x2},${y2} L${x3},${y3} A${ri},${ri},0,${large},0,${x4},${y4} Z" fill="${d.c}"/>`;
+      angle += sweep;
+    });
+  }
+  svg += `<text x="${cx}" y="${cy-6}" text-anchor="middle" font-size="22" font-weight="600" fill="#222">${total}</text>`;
+  svg += `<text x="${cx}" y="${cy+12}" text-anchor="middle" font-size="10" fill="#999">total PCRs</text>`;
+  svg += '</svg>';
+  document.getElementById('donutWrap').innerHTML = svg;
+  document.getElementById('donutLegend').innerHTML = data.map(d=>
+    `<span class="leg"><span class="leg-dot" style="background:${d.c}"></span>${d.label} ${d.v}</span>`
+  ).join('');
+})();
+
+/* Vertical bar chart helper */
+function vertBar(containerId, counts, labels) {
+  const vals = labels.map(l=>counts[l]||0);
+  const maxV = Math.max(...vals, 1);
+  const W=260, H=140, padB=24, padL=28, padR=10, padT=10;
+  const chartH = H-padB-padT, chartW = W-padL-padR;
+  const barW = chartW/labels.length*0.55;
+  const gap  = chartW/labels.length;
+  const colors = {Open:C.open, WIP:C.blank, Closed:C.closed, Blank:'#ccc'};
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
+  /* grid lines */
+  [0,0.5,1].forEach(f => {
+    const y = padT + chartH*(1-f);
+    svg += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#f0f0ee" stroke-width="1"/>`;
+    if (f>0) svg += `<text x="${padL-4}" y="${y+4}" text-anchor="end" font-size="9" fill="#bbb">${Math.round(maxV*f)}</text>`;
+  });
+  labels.forEach((lbl,i) => {
+    const v = vals[i];
+    const x = padL + gap*i + gap/2 - barW/2;
+    const barH2 = v===0 ? 0 : Math.max(2, (v/maxV)*chartH);
+    const y = padT + chartH - barH2;
+    svg += `<rect x="${x}" y="${y}" width="${barW}" height="${barH2}" fill="${colors[lbl]||'#999'}" rx="3"/>`;
+    if (v>0) svg += `<text x="${x+barW/2}" y="${y-3}" text-anchor="middle" font-size="10" font-weight="600" fill="#555">${v}</text>`;
+    svg += `<text x="${x+barW/2}" y="${H-6}" text-anchor="middle" font-size="10" fill="#888">${lbl}</text>`;
+  });
+  svg += '</svg>';
+  document.getElementById(containerId).innerHTML = svg;
+}
+
+/* Prog & Proven counts (for open/non-closed PCRs) */
+const progCount={Open:0,WIP:0,Closed:0,Blank:0}, provenCount={Open:0,WIP:0,Closed:0,Blank:0};
+let activeCount=0;
+ALL_PCRS.forEach(r => {
+  if ((r.status||'').trim()==='Closed') return;
+  activeCount++;
+  const p=(r.prog||'').trim();
+  if (p==='Open') progCount.Open++;
+  else if (p==='WIP') progCount.WIP++;
+  else if (p==='Closed') progCount.Closed++;
+  else progCount.Blank++;
+  const pv=(r.proven||'').trim();
+  if (pv==='Open') provenCount.Open++;
+  else if (pv==='WIP') provenCount.WIP++;
+  else if (pv==='Closed') provenCount.Closed++;
+  else provenCount.Blank++;
+});
+document.getElementById('prog-sub').textContent = 'Programming progression for '+activeCount+' open/pending PCRs';
+document.getElementById('proven-sub').textContent = 'Proving progression for '+activeCount+' open/pending PCRs';
+vertBar('progChartWrap',  progCount,  ['Open','WIP','Closed','Blank']);
+vertBar('provenChartWrap', provenCount, ['Open','WIP','Closed','Blank']);
+</script>
+</body>
+</html>
