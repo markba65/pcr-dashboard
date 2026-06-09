@@ -1,0 +1,52 @@
+name: Update PCR Data
+
+# Fired by Power Automate via the GitHub "Create a repository dispatch event" action.
+# Power Automate sends the current PCR records; this workflow writes data.json,
+# commits it, and deploys the dashboard to Azure Static Web Apps.
+on:
+  repository_dispatch:
+    types: [update-dashboard-data]
+
+permissions:
+  contents: write
+
+jobs:
+  update_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write data.json from dispatch payload
+        env:
+          # toJSON handles whichever shape Power Automate sends:
+          # an array  -> JSON array, or a string of JSON -> quoted string.
+          PCRS: ${{ toJSON(github.event.client_payload.pcrs) }}
+        run: |
+          python3 - << 'PY'
+          import json, os
+          v = os.environ['PCRS']
+          data = json.loads(v)
+          # If the payload arrived as a JSON string, unwrap it once more.
+          if isinstance(data, str):
+              data = json.loads(data)
+          with open('data.json', 'w', encoding='utf-8') as f:
+              json.dump(data, f, separators=(',', ':'))
+          print('Wrote', len(data), 'records to data.json')
+          PY
+
+      - name: Commit data.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          git diff --staged --quiet || git commit -m "Auto-update PCR data [skip ci]"
+          git push
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: 970a18824ff9bb3782f19d6aba59d97392f98961c8a8a1739778ed0bfa9578e507-2d5439f5-05d3-43ee-8d86-ded541795f0201022190b4125b10
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: /
+          skip_app_build: true
