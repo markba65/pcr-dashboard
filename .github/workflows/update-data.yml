@@ -1,32 +1,34 @@
 name: Update PCR Data
 
-# Fired by Power Automate via the GitHub "Create a repository dispatch event" action.
-# Power Automate sends the current PCR records; this workflow writes data.json,
-# commits it, and deploys the dashboard to Azure Static Web Apps.
+# Power Automate creates a GitHub issue titled DATA_UPDATE whose body is the
+# current PCR records as JSON. This workflow reads that issue, writes data.json,
+# commits it, deploys to Azure, then closes the issue.
+# (We use an issue instead of repository_dispatch because the Power Automate
+#  GitHub connector's dispatch action returns 404 — a known connector bug.)
 on:
-  repository_dispatch:
-    types: [update-dashboard-data]
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   update_and_deploy:
+    if: github.event.issue.title == 'DATA_UPDATE'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Write data.json from dispatch payload
+      - name: Write data.json from issue body
         env:
-          # toJSON handles whichever shape Power Automate sends:
-          # an array  -> JSON array, or a string of JSON -> quoted string.
-          PCRS: ${{ toJSON(github.event.client_payload.pcrs) }}
+          BODY: ${{ github.event.issue.body }}
         run: |
           python3 - << 'PY'
           import json, os
-          v = os.environ['PCRS']
-          data = json.loads(v)
-          # If the payload arrived as a JSON string, unwrap it once more.
+          raw = os.environ['BODY'].strip()
+          data = json.loads(raw)
+          # If the body arrived as a JSON string, unwrap it once.
           if isinstance(data, str):
               data = json.loads(data)
           with open('data.json', 'w', encoding='utf-8') as f:
@@ -50,3 +52,8 @@ jobs:
           action: upload
           app_location: /
           skip_app_build: true
+
+      - name: Close the update issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh issue close ${{ github.event.issue.number }} --comment "Dashboard updated automatically."
