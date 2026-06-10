@@ -13,6 +13,11 @@ permissions:
   contents: write
   issues: write
 
+# Only one update may run at a time; queue the rest so they don't race on git push.
+concurrency:
+  group: update-pcr-data
+  cancel-in-progress: false
+
 jobs:
   update_and_deploy:
     if: github.event.issue.title == 'DATA_UPDATE'
