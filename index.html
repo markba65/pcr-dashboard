@@ -21,7 +21,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tile-hint { font-size: 10px; color: #bbb; margin-top: 3px; }
 .v-total { color: #1a1a1a; }
 .v-open  { color: #c03030; }
-.v-blank { color: #cc7700; }
+.v-wip   { color: #cc7700; }
+.v-blank { color: #888; }
 .v-closed{ color: #3a6e12; }
 .drill-panel { background: #fff; border-radius: 10px; border: 0.5px solid #e0e0dc; padding: 14px 16px; margin-bottom: 14px; display: none; }
 .drill-panel.visible { display: block; }
@@ -65,13 +66,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="tile" onclick="drillDown('all')" id="tile-all">
     <div class="tile-label">Total PCRs</div>
     <div class="tile-value v-total" id="t-total">—</div>
-    <div class="tile-sub">PCR0275 – PCR0386+</div>
+    <div class="tile-sub" id="t-total-sub"></div>
     <div class="tile-hint">Click to view all</div>
   </div>
-  <div class="tile" onclick="drillDown('open')" id="tile-open">
-    <div class="tile-label">Open</div>
-    <div class="tile-value v-open" id="t-open">—</div>
-    <div class="tile-sub" id="t-open-sub"></div>
+  <div class="tile" onclick="drillDown('wip')" id="tile-wip">
+    <div class="tile-label">WIP</div>
+    <div class="tile-value v-wip" id="t-wip">—</div>
+    <div class="tile-sub" id="t-wip-sub"></div>
     <div class="tile-hint">Click to view</div>
   </div>
   <div class="tile" onclick="drillDown('closed')" id="tile-closed">
@@ -121,8 +122,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="card-title">PCRs by Work Centre (consolidated)</div>
     <div id="wcChartWrap"></div>
     <div class="legend">
-      <span class="leg"><span class="leg-dot" style="background:#E24B4A"></span>Open</span>
-      <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>Blank</span>
+      <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>WIP</span>
       <span class="leg"><span class="leg-dot" style="background:#639922"></span>Closed</span>
     </div>
   </div>
@@ -164,28 +164,30 @@ document.getElementById('asof').textContent = 'Data as of ' + new Date().toLocal
 let ALL_PCRS = [];
 
 /* ── Counts ── */
-let nOpen=0, nClosed=0, nBlank=0, nTotal=0;
+let nWIP=0, nClosed=0, nBlank=0, nTotal=0;
 function computeCounts() {
-  nOpen=0; nClosed=0; nBlank=0;
+  nWIP=0; nClosed=0; nBlank=0;
   ALL_PCRS.forEach(r => {
-  const s = (r.status||'').trim();
-  if (s==='Open') nOpen++;
-  else if (s==='Closed') nClosed++;
-  else nBlank++;
-});
+    const s = (r.status||'').trim();
+    if (s==='Closed') nClosed++;
+    else if (s==='WIP') nWIP++;
+    else nBlank++;
+  });
   nTotal = ALL_PCRS.length;
 
-document.getElementById('t-total').textContent = nTotal;
-document.getElementById('t-open').textContent = nOpen;
-document.getElementById('t-open-sub').textContent = Math.round(nOpen/nTotal*100)+'% of total';
-document.getElementById('t-closed').textContent = nClosed;
-document.getElementById('t-closed-sub').textContent = Math.round(nClosed/nTotal*100)+'% of total';
-document.getElementById('t-blank').textContent = nBlank;
-document.getElementById('t-blank-sub').textContent = 'Status not set';
-if (nBlank > 0) {
-  document.getElementById('tile-blank').style.display = '';
-  document.querySelector('.tiles').classList.add('has-blank');
-}
+  document.getElementById('t-total').textContent = nTotal;
+  document.getElementById('t-wip').textContent = nWIP;
+  document.getElementById('t-wip-sub').textContent = nTotal ? Math.round(nWIP/nTotal*100)+'% of total' : '';
+  document.getElementById('t-closed').textContent = nClosed;
+  document.getElementById('t-closed-sub').textContent = nTotal ? Math.round(nClosed/nTotal*100)+'% of total' : '';
+  document.getElementById('t-blank').textContent = nBlank;
+  document.getElementById('t-blank-sub').textContent = 'Status not set';
+  const ids = ALL_PCRS.map(r => r.pcr).filter(Boolean).sort();
+  if (ids.length) document.getElementById('t-total-sub').textContent = ids[0] + ' – ' + ids[ids.length-1];
+  if (nBlank > 0) {
+    document.getElementById('tile-blank').style.display = '';
+    document.querySelector('.tiles').classList.add('has-blank');
+  }
 }
 
 /* ── Drill-down ── */
@@ -203,9 +205,9 @@ function getFiltered() {
   const q = (document.getElementById('drillSearch').value||'').toLowerCase();
   return ALL_PCRS
     .filter(r => {
-      if (currentFilter==='open')   return (r.status||'').trim()==='Open';
+      if (currentFilter==='wip')    return (r.status||'').trim()==='WIP';
       if (currentFilter==='closed') return (r.status||'').trim()==='Closed';
-      if (currentFilter==='blank')  return (r.status||'').trim()!=='Open' && (r.status||'').trim()!=='Closed';
+      if (currentFilter==='blank')  return (r.status||'').trim()!=='WIP' && (r.status||'').trim()!=='Closed';
       return true;
     })
     .filter(r => !q || r.pcr.toLowerCase().includes(q) || (r.wc||'').toLowerCase().includes(q) || (r.status||'').toLowerCase().includes(q))
@@ -219,7 +221,7 @@ function drillDown(f) {
   currentFilter = f;
   document.querySelectorAll('.tile').forEach(t => t.classList.remove('active'));
   document.getElementById('tile-'+f).classList.add('active');
-  const titles = {all:'All PCRs', open:'Open PCRs', closed:'Closed PCRs', blank:'Blank / Pending PCRs'};
+  const titles = {all:'All PCRs', wip:'WIP PCRs', closed:'Closed PCRs', blank:'Blank / Pending PCRs'};
   document.getElementById('drillTitle').textContent = titles[f]||'PCRs';
   document.getElementById('drillSearch').value = '';
   document.getElementById('drillPanel').classList.add('visible');
@@ -299,8 +301,8 @@ function drawWcChart() {
 
 /* Donut chart */
 function drawDonut() {
-  const data = [{label:'Open',v:nOpen,c:C.open},{label:'Closed',v:nClosed,c:C.closed}];
-  if (nBlank > 0) data.push({label:'Blank',v:nBlank,c:C.blank});
+  const data = [{label:'WIP',v:nWIP,c:C.blank},{label:'Closed',v:nClosed,c:C.closed}];
+  if (nBlank > 0) data.push({label:'Blank',v:nBlank,c:'#bbb'});
   const cx=90, cy=90, ro=70, ri=45, total=nTotal;
   let svg = `<svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">`;
   if (total===0) { svg+=`<circle cx="${cx}" cy="${cy}" r="${ro}" fill="#eee"/>`; }
