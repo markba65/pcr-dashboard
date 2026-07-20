@@ -73,7 +73,6 @@ jobs:
           token = os.environ["GITHUB_TOKEN"]
           repo = os.environ["REPO"]
           issue_number = os.environ["ISSUE_NUMBER"]
-          auth_header = "token " + token
 
           def api_call(method, path, payload=None):
               data = None if payload is None else json.dumps(payload).encode("utf-8")
@@ -83,13 +82,13 @@ jobs:
                   method=method,
                   headers={
                       "Accept": "application/vnd.github+json",
-                      "Authorization": auth_header,
+                      "Authorization": "Bearer " + token,
                       "X-GitHub-Api-Version": "2022-11-28",
                   },
               )
               try:
                   with urllib.request.urlopen(req) as response:
-                      response.read()  # Body intentionally ignored; ensures request fully completes.
+                      response.read()  # We only need success/failure; body content is not used.
               except urllib.error.HTTPError as exc:
                   details = exc.read().decode("utf-8", errors="replace")
                   raise RuntimeError(
