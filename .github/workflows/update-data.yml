@@ -60,5 +60,20 @@ jobs:
 
       - name: Close the update issue
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh issue close ${{ github.event.issue.number }} --comment "Dashboard updated automatically."
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          curl -sSfL \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: ******" \
+            "https://api.github.com/repos/${REPO}/issues/${ISSUE_NUMBER}/comments" \
+            -d '{"body":"Dashboard updated automatically."}' > /dev/null
+
+          curl -sSfL \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: ******" \
+            "https://api.github.com/repos/${REPO}/issues/${ISSUE_NUMBER}" \
+            -d '{"state":"closed"}' > /dev/null
