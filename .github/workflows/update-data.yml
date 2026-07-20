@@ -73,12 +73,13 @@ jobs:
           token = os.environ["GITHUB_TOKEN"]
           repo = os.environ["REPO"]
           issue_number = os.environ["ISSUE_NUMBER"]
-          auth_header = "Bearer " + token
+          auth_header = "token " + token
 
-          def api_call(method, path, payload):
+          def api_call(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
               req = urllib.request.Request(
                   f"https://api.github.com/repos/{repo}{path}",
-                  data=json.dumps(payload).encode("utf-8"),
+                  data=data,
                   method=method,
                   headers={
                       "Accept": "application/vnd.github+json",
@@ -87,8 +88,8 @@ jobs:
                   },
               )
               try:
-                  with urllib.request.urlopen(req):
-                      pass
+                  with urllib.request.urlopen(req) as response:
+                      response.read()  # Body intentionally ignored; ensures request fully completes.
               except urllib.error.HTTPError as exc:
                   details = exc.read().decode("utf-8", errors="replace")
                   raise RuntimeError(
