@@ -64,16 +64,32 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          curl -sSfL \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: ******" \
-            "https://api.github.com/repos/${REPO}/issues/${ISSUE_NUMBER}/comments" \
-            -d '{"body":"Dashboard updated automatically."}' > /dev/null
+          python3 - << 'PY'
+          import json
+          import os
+          import urllib.request
 
-          curl -sSfL \
-            -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: ******" \
-            "https://api.github.com/repos/${REPO}/issues/${ISSUE_NUMBER}" \
-            -d '{"state":"closed"}' > /dev/null
+          token = os.environ["GITHUB_TOKEN"]
+          repo = os.environ["REPO"]
+          issue_number = os.environ["ISSUE_NUMBER"]
+          auth_header = "Bearer " + token
+
+          def api_call(method, path, payload):
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}{path}",
+                  data=json.dumps(payload).encode("utf-8"),
+                  method=method,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": auth_header,
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(req) as resp:
+                  if resp.status < 200 or resp.status >= 300:
+                      raise RuntimeError(f"GitHub API call failed with status {resp.status}")
+
+          api_call("POST", f"/issues/{issue_number}/comments", {"body": "Dashboard updated automatically."})
+          api_call("PATCH", f"/issues/{issue_number}", {"state": "closed"})
+          print(f"Closed issue #{issue_number}")
+          PY
